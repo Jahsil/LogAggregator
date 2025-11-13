@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_ERR">
+            <PatternLayout pattern="%d{HH:mm:ss} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <!-- Silence everything except your own prints -->
+        <Root level="WARN">
+            <AppenderRef ref="Console"/>
+        </Root>
+
+        <!-- Optional: silence specific Spark packages -->
+        <Logger name="org.apache.spark" level="WARN"/>
+        <Logger name="org.apache.hadoop" level="WARN"/>
+        <Logger name="org.sparkproject.jetty" level="WARN"/>
+    </Loggers>
+</Configuration>
