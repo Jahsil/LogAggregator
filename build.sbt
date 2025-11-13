@@ -10,8 +10,8 @@ lazy val root = (project in file("."))
 
     // Spark dependencies
     libraryDependencies ++= Seq(
-      "org.apache.spark" %% "spark-core" % "3.5.3" % "provided",
-      "org.apache.spark" %% "spark-sql"  % "3.5.3" % "provided",
+      "org.apache.spark" %% "spark-core" % "3.5.3",
+      "org.apache.spark" %% "spark-sql"  % "3.5.3"
     ),
 
     // Required for Java 17+ module access
