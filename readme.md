@@ -1,3 +1,4 @@
+
 #  Real-Time Log Aggregator
 ### Apache Spark Structured Streaming + Kafka + Cassandra
 
