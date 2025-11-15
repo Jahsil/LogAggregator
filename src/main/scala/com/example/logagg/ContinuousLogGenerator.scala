@@ -15,7 +15,7 @@ object ContinuousLogGenerator extends App {
   // Create output folder if not exists
   new java.io.File("logs").mkdirs()
 
-  println(s"🟢 Log generator started... Writing to $logFile every ${intervalMs}ms")
+  println(s"Log generator started... Writing to $logFile every ${intervalMs}ms")
 
   // === Define Sample Data ===
   val ipAddresses = Seq("192.168.1.10", "10.0.0.15", "172.16.0.22", "203.0.113.5")
