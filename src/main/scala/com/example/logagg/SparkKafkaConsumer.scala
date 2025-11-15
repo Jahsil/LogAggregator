@@ -102,6 +102,24 @@ object SparkKafkaConsumer extends App {
     )
 
 
+  val topIPsDF = nginxLogs
+    .withColumn("ip", regexp_extract(col("log"), """^(\S+)""", 1))
+    .groupBy(window(col("event_ts"), "30 seconds"), col("ip"))
+    .agg(
+      count("*").as("hits"),
+      sum("bytes").as("total_bytes"),
+      sum("is_error").as("error_hits")
+    )
+    .select(
+      col("window.start").cast("timestamp").as("window_start"),
+      col("window.end").cast("timestamp").as("window_end"),
+      col("ip"),
+      col("hits"),
+      col("total_bytes"),
+      col("error_hits")
+    )
+
+
   def writeTopEndpoints(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
       val ranked = batchDF
@@ -159,6 +177,32 @@ object SparkKafkaConsumer extends App {
     }
   }
 
+  def writeIPsToCassandra(batchDF: DataFrame, batchId: Long): Unit = {
+    if (!batchDF.isEmpty) {
+      val ranked = batchDF
+        .withColumn("rank", row_number().over(Window.partitionBy("window_start").orderBy(col("hits").desc)))
+        .filter(col("rank") <= 10)
+        .select(
+          "window_start",
+          "window_end",
+          "rank",
+          "ip",
+          "hits",
+          "total_bytes",
+          "error_hits"
+        )
+
+      println(s"\n[info] Batch $batchId → top_ips_30s")
+      ranked.orderBy("window_start", "rank").show(20, truncate = false)
+
+      ranked.write
+        .format("org.apache.spark.sql.cassandra")
+        .options(Map("keyspace" -> "log_ks", "table" -> "top_ips_30s"))
+        .mode("append")
+        .save()
+    }
+  }
+
   val query1 = topEndpointsBase.writeStream
     .outputMode("complete")
     .foreachBatch(writeTopEndpoints _)
@@ -173,6 +217,15 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/top_errors_30s")
     .start()
 
+  val query3 = topIPsDF.writeStream
+    .outputMode("complete")
+    .foreachBatch(writeIPsToCassandra _)
+    .trigger(Trigger.ProcessingTime("30 seconds"))
+    .option("checkpointLocation", "file:///tmp/spark-checkpoint/top_ips_30s")
+    .start()
+
   query1.awaitTermination()
   query2.awaitTermination()
+  query3.awaitTermination()
+
 }

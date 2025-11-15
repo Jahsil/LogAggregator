@@ -19,7 +19,7 @@ object KafkaLogger extends App {
 
   val producer = new KafkaProducer[String, String](props)
 
-  // === Sample log data ===
+  //  Sample log data
   val random = new Random()
   val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
@@ -67,6 +67,6 @@ object KafkaLogger extends App {
     producer.send(record)
     println(logLine)
 
-    Thread.sleep(500 + random.nextInt(500)) // random interval
+    Thread.sleep(500 + random.nextInt(500))
   }
 }
