@@ -13,7 +13,8 @@ lazy val root = (project in file("."))
       "org.apache.spark" %% "spark-sql"  % "3.5.3",
       "org.apache.spark" %% "spark-sql-kafka-0-10" % "3.5.0",
       "org.apache.kafka" % "kafka-clients" % "3.6.1",
-      "com.datastax.spark" %% "spark-cassandra-connector" % "3.5.0"
+      "com.datastax.spark" %% "spark-cassandra-connector" % "3.5.0",
+      "com.typesafe" % "config" % "1.4.5"
     ),
 
     // Required for Java 17+ module access
