@@ -54,7 +54,7 @@ object KafkaLogger extends App {
     s"${LocalDateTime.now().format(formatter)} [OS] [$metric] Usage at $value%"
   }
 
-  println("🟢 Kafka Log Generator started...")
+  println("Kafka Log Generator started...")
 
   while (true) {
     val logLine = random.nextInt(3) match {
