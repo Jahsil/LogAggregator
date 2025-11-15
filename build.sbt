@@ -8,10 +8,12 @@ lazy val root = (project in file("."))
     name := "LogAggregator",
 //    idePackagePrefix := Some("com.example.logagg")
 
-    // Spark dependencies
     libraryDependencies ++= Seq(
       "org.apache.spark" %% "spark-core" % "3.5.3",
-      "org.apache.spark" %% "spark-sql"  % "3.5.3"
+      "org.apache.spark" %% "spark-sql"  % "3.5.3",
+      "org.apache.spark" %% "spark-sql-kafka-0-10" % "3.5.0",
+      "org.apache.kafka" % "kafka-clients" % "3.6.1",
+      "com.datastax.spark" %% "spark-cassandra-connector" % "3.5.0"
     ),
 
     // Required for Java 17+ module access
@@ -20,7 +22,6 @@ lazy val root = (project in file("."))
     javaOptions ++= Seq(
       "-Xmx2g",
 
-      // === Critical: Fix IllegalAccessError on Java 17+ ===
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
