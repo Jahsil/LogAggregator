@@ -26,14 +26,15 @@ It includes:
 
 You need the following services running:
 
-| Component | Version | Notes |
-|----------|---------|--------|
-| **Apache Kafka** | latest  | Single-broker local setup is fine |
-| **Apache Spark** | 3.5+    | Using Structured Streaming |
+| Component | Version | Notes                               |
+|----------|---------|-------------------------------------|
+| **Apache Kafka** | latest  | Single-broker local setup is fine   |
+| **Apache Spark** | 3.5+    | Using Structured Streaming          |
 | **Cassandra** | latest  | Must have keyspace + tables created |
-| **Scala** | 2.13.12 | Matches Spark version |
-| **sbt** | 1.1+    | Build tool |
-
+| **Scala** | 2.13.12 | Matches Spark version               |
+| **sbt** | 1.1+    | Build tool                          |
+ **IntelliJ** | latest  | IDE                                 |
+ **JDK** | 17.0.17 | Java version   
 
 
 #  Cassandra Setup
@@ -46,12 +47,18 @@ cqlsh -f schema.cql
 
 #  Procedure
 
-Rebuild sbt:
+Make sure all services are up:
 
 ```sql
-sbt reload
+brew services list
+
+You should see :
+Name      Status  User   File
+cassandra started eyouel ~/Library/LaunchAgents/homebrew.mxcl.cassandra.plist
+kafka     started eyouel ~/Library/LaunchAgents/homebrew.mxcl.kafka.plist
 ```
-Rebuild sbt:
+
+Rebuild sbt or use UI to restart it:
 
 ```sql
 sbt reload
