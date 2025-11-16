@@ -4,6 +4,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{desc, _}
 
 object SparkKafkaConsumer extends App {
 
@@ -119,6 +120,15 @@ object SparkKafkaConsumer extends App {
       col("error_hits")
     )
 
+  val numberOfStatusCounts = nginxLogs
+    .groupBy(window(col("event_ts"), "30 seconds"), col("status"))
+    .count()
+    .select(
+      col("window.start").cast("timestamp").as("window_start"),
+      col("status").as("status_code"),
+      col("count").as("cnt")
+    )
+
 
   def writeTopEndpoints(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
@@ -203,6 +213,20 @@ object SparkKafkaConsumer extends App {
     }
   }
 
+  def writeNumberOfStatusCodesToCassandra(batchDF: DataFrame, batchId: Long): Unit = {
+    if (!batchDF.isEmpty) {
+      println(s"\n[info] Batch $batchId → status_codes_30s")
+      batchDF.orderBy("window_start", "status_code").show(50, truncate = false)
+
+      batchDF.write
+        .format("org.apache.spark.sql.cassandra")
+        .options(Map("keyspace" -> "log_ks", "table" -> "status_codes_30s"))
+        .mode("append")
+        .save()
+    }
+  }
+
+
   val query1 = topEndpointsBase.writeStream
     .outputMode("complete")
     .foreachBatch(writeTopEndpoints _)
@@ -224,8 +248,18 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/top_ips_30s")
     .start()
 
+  val query4 = numberOfStatusCounts.writeStream
+    .outputMode("complete")
+    .foreachBatch(writeNumberOfStatusCodesToCassandra _)
+    .trigger(Trigger.ProcessingTime("30 seconds"))
+    .option("checkpointLocation", "file:///tmp/spark-checkpoint/status_codes_30s")
+    .start()
+
+
+
   query1.awaitTermination()
   query2.awaitTermination()
   query3.awaitTermination()
+  query4.awaitTermination()
 
 }
