@@ -129,6 +129,17 @@ object SparkKafkaConsumer extends App {
       col("count").as("cnt")
     )
 
+  val avgOSMetrics = typeAdded.filter(col("type") === "os")
+    .withColumn("metric", regexp_extract(col("log"), """\[OS\]\s*\[(\w+)\]""", 1))
+    .withColumn("value", regexp_extract(col("log"), """Usage at (\d+)%""", 1).cast("double"))
+    .groupBy(window(col("event_ts"), "30 seconds"), col("metric"))
+    .agg(avg("value").as("avg_value"))
+    .select(
+      col("window.start").cast("timestamp").as("window_start"),
+      col("metric"),
+      round(col("avg_value"), 2).as("avg_value")
+    )
+
 
   def writeTopEndpoints(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
@@ -226,6 +237,19 @@ object SparkKafkaConsumer extends App {
     }
   }
 
+  def writeAvgOSMetrics(batchDF: DataFrame, batchId: Long): Unit = {
+    if (!batchDF.isEmpty) {
+      println(s"\n[info] Batch $batchId → os_metrics_avg_30s")
+      batchDF.orderBy("window_start", "metric").show(20, truncate = false)
+
+      batchDF.write
+        .format("org.apache.spark.sql.cassandra")
+        .options(Map("keyspace" -> "log_ks", "table" -> "os_metrics_avg_30s"))
+        .mode("append")
+        .save()
+    }
+  }
+
 
   val query1 = topEndpointsBase.writeStream
     .outputMode("complete")
@@ -255,11 +279,19 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/status_codes_30s")
     .start()
 
+  val query5 = avgOSMetrics.writeStream
+    .outputMode("complete")
+    .foreachBatch(writeAvgOSMetrics _)
+    .trigger(Trigger.ProcessingTime("30 seconds"))
+    .option("checkpointLocation", "file:///tmp/spark-checkpoint/os_metrics_avg_30s")
+    .start()
+
 
 
   query1.awaitTermination()
   query2.awaitTermination()
   query3.awaitTermination()
   query4.awaitTermination()
+  query5.awaitTermination()
 
 }
