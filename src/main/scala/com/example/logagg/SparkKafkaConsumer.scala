@@ -140,6 +140,23 @@ object SparkKafkaConsumer extends App {
       round(col("avg_value"), 2).as("avg_value")
     )
 
+  val appErrorCounts = typeAdded
+    .filter(col("type") === "app")
+    .withColumn("level",  regexp_extract(col("log"), """\[(\w+)\]""", 1))
+    .withColumn("module", regexp_extract(col("log"), """\[(\w+)\]\s*\[([A-Za-z]+)\]""", 2))
+    .groupBy(window(col("event_ts"), "30 seconds"), col("module"))
+    .agg(
+      count(when(col("level") === "ERROR", 1)).as("error_count"),
+      count(when(col("level") === "WARN",  1)).as("warn_count"),
+      count(when(col("level") === "INFO",  1)).as("info_count")
+    )
+    .select(
+      col("window.start").cast("timestamp").as("window_start"),
+      col("window.end").cast("timestamp").as("window_end"),
+      col("module"),
+      col("error_count"),
+      col("warn_count")
+    )
 
   def writeTopEndpoints(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
@@ -250,6 +267,21 @@ object SparkKafkaConsumer extends App {
     }
   }
 
+  def writeAppModuleErrors(batchDF: DataFrame, batchId: Long): Unit = {
+    if (!batchDF.isEmpty) {
+      println(s"\n[info] Batch $batchId → app_module_errors_30s")
+      batchDF
+        .orderBy(col("error_count").desc, col("window_start"))
+        .show(20, truncate = false)
+
+      batchDF.write
+        .format("org.apache.spark.sql.cassandra")
+        .options(Map("keyspace" -> "log_ks", "table" -> "app_module_errors_30s"))
+        .mode("append")
+        .save()
+    }
+  }
+
 
   val query1 = topEndpointsBase.writeStream
     .outputMode("complete")
@@ -286,6 +318,13 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/os_metrics_avg_30s")
     .start()
 
+  val query6 = appErrorCounts.writeStream
+    .outputMode("complete")
+    .foreachBatch(writeAppModuleErrors _)
+    .trigger(Trigger.ProcessingTime("30 seconds"))
+    .option("checkpointLocation", "file:///tmp/spark-checkpoint/app_module_errors_30s")
+    .start()
+
 
 
   query1.awaitTermination()
@@ -293,5 +332,6 @@ object SparkKafkaConsumer extends App {
   query3.awaitTermination()
   query4.awaitTermination()
   query5.awaitTermination()
+  query6.awaitTermination()
 
 }
