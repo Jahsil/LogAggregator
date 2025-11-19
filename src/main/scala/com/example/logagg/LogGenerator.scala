@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import scala.util.Random
 
-object LogGenerator {
+object LogGenerator extends App {
 
   private val random = new Random()
   private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")

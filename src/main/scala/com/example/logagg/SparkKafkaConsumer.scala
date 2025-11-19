@@ -8,13 +8,10 @@ object SparkKafkaConsumer extends App {
 
   val spark = SparkSession.builder()
     .appName("KafkaToCassandra")
-    .master("local[*]")
-    .config("spark.cassandra.connection.host", "127.0.0.1")
+    .master("spark://spark-master:7077") // Connects to Spark master container
+    .config("spark.cassandra.connection.host", "cassandra") // Docker service name
     .config("spark.cassandra.connection.port", "9042")
     .config("spark.sql.extensions", "com.datastax.spark.connector.CassandraSparkExtensions")
-//    .config("spark.sql.streaming.checkpointLocation", "file:///tmp/spark-checkpoint")
-    .config("spark.driver.bindAddress", "127.0.0.1")
-    .config("spark.ui.port", "4050")
     .getOrCreate()
 
   spark.sparkContext.setLogLevel("WARN")
