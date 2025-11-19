@@ -328,10 +328,14 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/app_module_errors_30s")
     .start()
 
-  query1.awaitTermination()
-  query2.awaitTermination()
-  query3.awaitTermination()
-  query4.awaitTermination()
-  query5.awaitTermination()
-  query6.awaitTermination()
+//  query1.awaitTermination()
+//  query2.awaitTermination()
+//  query3.awaitTermination()
+//  query4.awaitTermination()
+//  query5.awaitTermination()
+//  query6.awaitTermination()
+
+  val queries = Seq(query1, query2, query3, query4, query5, query6)
+
+  spark.streams.awaitAnyTermination()
 }
