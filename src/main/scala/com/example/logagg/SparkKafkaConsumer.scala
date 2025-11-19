@@ -4,7 +4,6 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{desc, _}
 
 object SparkKafkaConsumer extends App {
 
@@ -50,12 +49,7 @@ object SparkKafkaConsumer extends App {
       col("count").as("cnt")
     )
 
-  val typeCounts10s = logCounts
-    .select(
-      col("window_start"),
-      col("type"),
-      col("cnt")
-    )
+  val typeCounts10s = logCounts.select("window_start", "type", "cnt")
 
   val nginxLogs = typeAdded
     .filter(col("type") === "nginx")
@@ -63,10 +57,6 @@ object SparkKafkaConsumer extends App {
     .withColumn("is_error", when(col("status") >= 400, 1).otherwise(0))
     .withColumn("bytes", regexp_extract(col("log"), """ (\d+)$""", 1).cast("long"))
     .withColumn("endpoint", regexp_extract(col("log"), """GET (/\S*)""", 1))
-
-
-
-
 
   val topEndpointsBase = nginxLogs
     .groupBy(window(col("event_ts"), "30 seconds"), col("endpoint"))
@@ -86,14 +76,8 @@ object SparkKafkaConsumer extends App {
 
   val topErrorsBase = nginxLogs
     .filter(col("status") >= 400)
-    .withColumn(
-      "error_msg",
-      regexp_extract(col("log"), "\"[A-Z]+ ([^ ]+) HTTP", 1)
-    )
-    .groupBy(
-      window(col("event_ts"), "30 seconds"),
-      col("error_msg")
-    )
+    .withColumn("error_msg", regexp_extract(col("log"), "\"[A-Z]+ ([^ ]+) HTTP", 1))
+    .groupBy(window(col("event_ts"), "30 seconds"), col("error_msg"))
     .agg(count("*").as("cnt"))
     .select(
       col("window.start").cast("timestamp").as("window_start"),
@@ -101,7 +85,6 @@ object SparkKafkaConsumer extends App {
       col("error_msg").as("message"),
       col("cnt")
     )
-
 
   val topIPsDF = nginxLogs
     .withColumn("ip", regexp_extract(col("log"), """^(\S+)""", 1))
@@ -142,13 +125,13 @@ object SparkKafkaConsumer extends App {
 
   val appErrorCounts = typeAdded
     .filter(col("type") === "app")
-    .withColumn("level",  regexp_extract(col("log"), """\[(\w+)\]""", 1))
+    .withColumn("level", regexp_extract(col("log"), """\[(\w+)\]""", 1))
     .withColumn("module", regexp_extract(col("log"), """\[(\w+)\]\s*\[([A-Za-z]+)\]""", 2))
     .groupBy(window(col("event_ts"), "30 seconds"), col("module"))
     .agg(
       count(when(col("level") === "ERROR", 1)).as("error_count"),
-      count(when(col("level") === "WARN",  1)).as("warn_count"),
-      count(when(col("level") === "INFO",  1)).as("info_count")
+      count(when(col("level") === "WARN", 1)).as("warn_count"),
+      count(when(col("level") === "INFO", 1)).as("info_count")
     )
     .select(
       col("window.start").cast("timestamp").as("window_start"),
@@ -158,24 +141,29 @@ object SparkKafkaConsumer extends App {
       col("warn_count")
     )
 
+
+  def withBucketDate(df: DataFrame): DataFrame = {
+    df.withColumn("bucket_date", to_date(col("window_start")))
+  }
+
   def writeTopEndpoints(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-      val ranked = batchDF
-        .withColumn("rank",
-          row_number().over(Window.partitionBy("window_start").orderBy(col("hits").desc))
-        )
+      val ranked = withBucketDate(batchDF)
+        .withColumn("rank", row_number().over(Window.partitionBy("window_start").orderBy(col("hits").desc)))
         .filter(col("rank") <= 10)
         .select(
+          col("bucket_date"),
           col("window_start"),
-          col("window_end"),
           col("rank"),
           col("endpoint"),
           col("hits"),
           col("total_bytes"),
           col("error_hits")
         )
+
       println(s"\n[info] Batch $batchId → top_endpoints_30s")
       ranked.orderBy("window_start", "rank").show(50, truncate = false)
+
       ranked.write
         .format("org.apache.spark.sql.cassandra")
         .options(Map("keyspace" -> "log_ks", "table" -> "top_endpoints_30s"))
@@ -186,19 +174,12 @@ object SparkKafkaConsumer extends App {
 
   def writeTopErrors(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-
-      val ranked = batchDF
-        .withColumn(
-          "rank",
-          row_number().over(
-            Window.partitionBy("window_start")
-              .orderBy(col("cnt").desc)
-          )
-        )
+      val ranked = withBucketDate(batchDF)
+        .withColumn("rank", row_number().over(Window.partitionBy("window_start").orderBy(col("cnt").desc)))
         .filter(col("rank") <= 5)
         .select(
+          col("bucket_date"),
           col("window_start"),
-          col("window_end"),
           col("rank"),
           col("message"),
           col("cnt")
@@ -217,17 +198,17 @@ object SparkKafkaConsumer extends App {
 
   def writeIPsToCassandra(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-      val ranked = batchDF
+      val ranked = withBucketDate(batchDF)
         .withColumn("rank", row_number().over(Window.partitionBy("window_start").orderBy(col("hits").desc)))
         .filter(col("rank") <= 10)
         .select(
-          "window_start",
-          "window_end",
-          "rank",
-          "ip",
-          "hits",
-          "total_bytes",
-          "error_hits"
+          col("bucket_date"),
+          col("window_start"),
+          col("rank"),
+          col("ip"),
+          col("hits"),
+          col("total_bytes"),
+          col("error_hits")
         )
 
       println(s"\n[info] Batch $batchId → top_ips_30s")
@@ -243,10 +224,18 @@ object SparkKafkaConsumer extends App {
 
   def writeNumberOfStatusCodesToCassandra(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-      println(s"\n[info] Batch $batchId → status_codes_30s")
-      batchDF.orderBy("window_start", "status_code").show(50, truncate = false)
+      val finalDF = withBucketDate(batchDF)
+        .select(
+          col("bucket_date"),
+          col("window_start"),
+          col("status_code"),
+          col("cnt")
+        )
 
-      batchDF.write
+      println(s"\n[info] Batch $batchId → status_codes_30s")
+      finalDF.orderBy("window_start", "status_code").show(50, truncate = false)
+
+      finalDF.write
         .format("org.apache.spark.sql.cassandra")
         .options(Map("keyspace" -> "log_ks", "table" -> "status_codes_30s"))
         .mode("append")
@@ -256,10 +245,18 @@ object SparkKafkaConsumer extends App {
 
   def writeAvgOSMetrics(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-      println(s"\n[info] Batch $batchId → os_metrics_avg_30s")
-      batchDF.orderBy("window_start", "metric").show(20, truncate = false)
+      val finalDF = withBucketDate(batchDF)
+        .select(
+          col("bucket_date"),
+          col("window_start"),
+          col("metric"),
+          col("avg_value")
+        )
 
-      batchDF.write
+      println(s"\n[info] Batch $batchId → os_metrics_avg_30s")
+      finalDF.orderBy("window_start", "metric").show(20, truncate = false)
+
+      finalDF.write
         .format("org.apache.spark.sql.cassandra")
         .options(Map("keyspace" -> "log_ks", "table" -> "os_metrics_avg_30s"))
         .mode("append")
@@ -269,19 +266,25 @@ object SparkKafkaConsumer extends App {
 
   def writeAppModuleErrors(batchDF: DataFrame, batchId: Long): Unit = {
     if (!batchDF.isEmpty) {
-      println(s"\n[info] Batch $batchId → app_module_errors_30s")
-      batchDF
-        .orderBy(col("error_count").desc, col("window_start"))
-        .show(20, truncate = false)
+      val finalDF = withBucketDate(batchDF)
+        .select(
+          col("bucket_date"),
+          col("window_start"),
+          col("module"),
+          col("error_count"),
+          col("warn_count")
+        )
 
-      batchDF.write
+      println(s"\n[info] Batch $batchId → app_module_errors_30s")
+      finalDF.orderBy(col("error_count").desc, col("window_start")).show(20, truncate = false)
+
+      finalDF.write
         .format("org.apache.spark.sql.cassandra")
         .options(Map("keyspace" -> "log_ks", "table" -> "app_module_errors_30s"))
         .mode("append")
         .save()
     }
   }
-
 
   val query1 = topEndpointsBase.writeStream
     .outputMode("complete")
@@ -325,13 +328,10 @@ object SparkKafkaConsumer extends App {
     .option("checkpointLocation", "file:///tmp/spark-checkpoint/app_module_errors_30s")
     .start()
 
-
-
   query1.awaitTermination()
   query2.awaitTermination()
   query3.awaitTermination()
   query4.awaitTermination()
   query5.awaitTermination()
   query6.awaitTermination()
-
 }
