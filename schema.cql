@@ -1,64 +1,58 @@
 CREATE KEYSPACE IF NOT EXISTS log_ks
 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
-USE log_ks;
-
-CREATE TABLE type_counts_10s (
-    window_start timestamp,
-    type text,
-    cnt bigint,
-    PRIMARY KEY (window_start, type)
-);
-
-CREATE TABLE error_rate_30s (
-    window_start timestamp,
-    error_rate double,
-    total_logs bigint,
-    error_logs bigint,
-    PRIMARY KEY (window_start)
-);
-
-CREATE TABLE latency_30s (
-    window_start timestamp,
-    avg_ms double,
-    p95_ms double,
-    p99_ms double,
-    PRIMARY KEY (window_start)
-);
-
-CREATE TABLE top_endpoints_30s (
+CREATE TABLE IF NOT EXISTS log_ks.top_endpoints_30s (
+    bucket_date date,
     window_start timestamp,
     rank int,
     endpoint text,
     hits bigint,
     total_bytes bigint,
-    PRIMARY KEY (window_start, rank)
-);
+    error_hits bigint,
+    PRIMARY KEY (bucket_date, window_start, rank)
+) WITH CLUSTERING ORDER BY (window_start DESC, rank ASC);
 
-CREATE TABLE top_errors_30s (
+CREATE TABLE IF NOT EXISTS log_ks.top_errors_30s (
+    bucket_date date,
     window_start timestamp,
     rank int,
     message text,
     cnt bigint,
-    PRIMARY KEY (window_start, rank)
-);
+    PRIMARY KEY (bucket_date, window_start, rank)
+) WITH CLUSTERING ORDER BY (window_start DESC, rank ASC);
 
-CREATE TABLE ip_sessions (
-    ip text,
-    session_start timestamp,
-    session_end timestamp,
-    log_count bigint,
-    endpoints set<text>,
-    PRIMARY KEY (ip, session_start)
-) WITH CLUSTERING ORDER BY (session_start DESC);
-
-CREATE TABLE log_counts (
+CREATE TABLE IF NOT EXISTS log_ks.top_ips_30s (
+    bucket_date date,
     window_start timestamp,
-    window_end timestamp,
-    type text,
-    cnt bigint,
-    PRIMARY KEY (type, window_start)   -- ← Critical: allows upsert
-) WITH CLUSTERING ORDER BY (window_start DESC);
+    rank int,
+    ip text,
+    hits bigint,
+    total_bytes bigint,
+    error_hits bigint,
+    PRIMARY KEY (bucket_date, window_start, rank)
+) WITH CLUSTERING ORDER BY (window_start DESC, rank ASC);
 
--- any one of you can use this command to create the tables on you own machines
--- cqlsh -f schema.cql
+CREATE TABLE IF NOT EXISTS log_ks.status_codes_30s (
+    bucket_date date,
+    window_start timestamp,
+    status_code int,
+    cnt bigint,
+    PRIMARY KEY (bucket_date, window_start, status_code)
+) WITH CLUSTERING ORDER BY (window_start DESC, status_code ASC);
+
+CREATE TABLE IF NOT EXISTS log_ks.app_module_errors_30s (
+    bucket_date date,
+    window_start timestamp,
+    module text,
+    error_count bigint,
+    warn_count bigint,
+    PRIMARY KEY (bucket_date, window_start, module)
+) WITH CLUSTERING ORDER BY (window_start DESC, module ASC);
+
+CREATE TABLE IF NOT EXISTS log_ks.os_metrics_avg_30s (
+    bucket_date date,
+    window_start timestamp,
+    metric text,
+    avg_value double,
+    PRIMARY KEY (bucket_date, window_start, metric)
+) WITH CLUSTERING ORDER BY (window_start DESC, metric ASC);

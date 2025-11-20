@@ -125,35 +125,6 @@ services:
     ports:
       - "8082:8081" # Spark Worker UI
 
-  log-generator:
-    image: log-app
-    container_name: log-generator
-    networks:
-      - scala-network
-    command: [ "com.example.logagg.LogGenerator" ]
-    depends_on:
-      - broker
-
-  scala-consumer:
-    image: log-app
-    container_name: scala-consumer
-    networks:
-      - scala-network
-    depends_on:
-      - spark-master
-      - cassandra
-      - broker
-    command: [ "com.example.logagg.SparkKafkaConsumer" ]
-
-  metrics-exporter:
-    image: log-app
-    container_name: metrics-exporter
-    networks:
-      - scala-network
-    ports:
-      - "9095:9095"
-    command: [ "com.example.logagg.MetricsExporter" ]
-
 volumes:
   cassandra-data:
   grafana-data:
