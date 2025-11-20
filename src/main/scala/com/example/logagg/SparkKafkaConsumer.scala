@@ -5,6 +5,11 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.expressions.Window
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.net.URI
+
+
 object SparkKafkaConsumer extends App {
 
   val spark = SparkSession.builder()
@@ -38,6 +43,54 @@ object SparkKafkaConsumer extends App {
       .when(col("log").contains("GET"), "nginx")
       .otherwise("app")
   )
+
+
+  def writeRawLogsToHDFS(batchDF: DataFrame, batchId: Long): Unit = {
+    if (!batchDF.isEmpty) {
+      val processed = batchDF
+        .withColumn("date", to_date(col("event_ts")))
+        .select("date", "log")
+
+      val rows = processed.collect()
+      val grouped = rows.groupBy(_.getDate(0)) // group by date column
+
+      grouped.foreach { case (date, groupRows) =>
+        val ymd = date.toString
+        val logLines = groupRows.map(_.getString(1)).mkString("\n") + "\n"
+
+        val hdfsPath = s"hdfs://localhost:9000/log_aggregator/raw_logs/$ymd/raw-$ymd.log"
+
+        val conf = new Configuration()
+        val fs = FileSystem.get(new URI("hdfs://localhost:9000"), conf)
+        val path = new Path(hdfsPath)
+        val tmpPath = new Path(hdfsPath + ".tmp")
+
+        if (!fs.exists(path)) {
+          val out = fs.create(path)
+          out.write(logLines.getBytes("UTF-8"))
+          out.close()
+        } else {
+          fs.rename(path, tmpPath)
+          val out = fs.create(path)
+          val in = fs.open(tmpPath)
+          org.apache.hadoop.io.IOUtils.copyBytes(in, out, conf, false)
+          out.write(logLines.getBytes("UTF-8"))
+          out.close()
+          in.close()
+          fs.delete(tmpPath, false)
+        }
+
+        println(s"[HDFS] appended ${groupRows.length} logs → $hdfsPath")
+      }
+    }
+  }
+
+  val hdfsRawQuery = logs.writeStream
+    .foreachBatch(writeRawLogsToHDFS _)
+    .outputMode("append")
+    .trigger(Trigger.ProcessingTime("30 seconds"))
+    .option("checkpointLocation", "file:///tmp/spark-checkpoint/raw_logs")
+    .start()
 
   val logCounts = typeAdded
     .groupBy(window(col("event_ts"), "10 seconds"), col("type"))
