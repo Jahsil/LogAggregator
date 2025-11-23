@@ -25,7 +25,7 @@ It includes:
 
 ### Demo Video
 
-[![Watch the full real-time demo on YouTube](https://img.youtube.com/vi/gbw-dTgKSRE/maxresdefault.jpg)](https://www.youtube.com/watch?v=gbw-dTgKSRE&t=954s)
+[![Watch the full real-time demo on YouTube](https://img.youtube.com/vi/gbw-dTgKSRE/maxresdefault.jpg)](https://www.youtube.com/watch?v=gbw-dTgKSRE&t)
 
 ---
 #  Requirements
