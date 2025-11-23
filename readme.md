@@ -23,6 +23,11 @@ It includes:
 
 ---
 
+### Demo Video
+
+[![Watch the full real-time demo on YouTube](https://img.youtube.com/vi/gbw-dTgKSRE/maxresdefault.jpg)](https://www.youtube.com/watch?v=gbw-dTgKSRE&t=954s)
+
+---
 #  Requirements
 
 You need the following services running:
@@ -43,7 +48,7 @@ You need the following services running:
 Create keyspace:
 
 ```sql
-cqlsh -f schema.cql
+cqlsh -f schema3.cql
 ```
 
 #  Procedure
@@ -64,10 +69,14 @@ Rebuild sbt or use UI to restart it:
 ```sql
 sbt reload
 ```
+Run kafka streamer:
+
+```sql
+sbt "runMain com.example.logagg.KafkaLogger"
+```
 
 Run consumer:
 
 ```sql
 sbt "runMain com.example.logagg.SparkKafkaConsumer"
 ```
-
